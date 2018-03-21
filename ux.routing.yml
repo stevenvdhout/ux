@@ -1,0 +1,11 @@
+
+ux.ux_settings_form:
+  path: '/admin/config/calibr8/ux'
+  defaults:
+    _form: '\Drupal\ux\Form\UxSettingsForm'
+    _title: 'UX Settings'
+  requirements:
+    _permission: 'administer site configuration'
+  options:
+    _admin_route: TRUE
+

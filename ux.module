@@ -1,0 +1,177 @@
+<?php
+
+use Drupal\Core\Form\FormStateInterface;
+
+/*
+ * Implements hook_module_implements_alter().
+ */
+function ux_module_implements_alter(&$implementations, $hook) {
+  $hooks = ['form_alter'];
+  if (in_array($hook, $hooks)) {
+    $group = $implementations['ux'];
+    unset($implementations['ux']);
+    $implementations['ux'] = $group;
+  }
+}
+
+
+/*
+ * Implements hook_form_alter().
+ */
+function ux_form_alter(&$form, &$form_state, $form_id) {
+
+
+  $config = \Drupal::config('ux.settings');
+
+  // Improve the vbo actions
+  if ($config->get('ux_vbo_hide')) {
+    $bulk_forms = [
+      'views_form_content_page_1' => 'node_bulk_form',
+      'views_form_media_media_page_list' => 'media_bulk_form',
+      'views_form_user_admin_people_page_1' => 'user_bulk_form',
+      'views_form_redirect_page_1' => 'redirect_bulk_form',
+      'views_form_scheduler_scheduled_content_overview' => 'node_bulk_form',
+    ];
+
+    foreach ($bulk_forms as $id => $element) {
+      if ($form_id == $id) {
+
+        if (isset($form['header'][$element])) {
+          $form['header'][$element]['action']['#title'] = t('With selected');
+          //$form['header']['#weight'] = '100';
+          $form['header'][$element]['actions']['submit']['#value'] = t('Apply');
+          $form['header'][$element]['#attributes'] = ['class' => 'container-inline'];
+          $form['header']['#states'] = [
+            'visible' => [
+              '[name^=' . $element => array('checked' => TRUE),
+            ],
+          ];
+          $form['actions']['#access'] = FALSE;
+        }
+      }
+    }
+  }
+
+  // alter node forms
+  if (substr($form_id, 0, 5) == 'node_') {
+
+    if ($config->get('ux_node_form_cleanup')) {
+      // move the published checkbox to the sidebar
+      $form['status']['#group'] = 'meta';
+      // hide title label
+      $form['title']['widget'][0]['value']['#title_display'] = 'invisible';
+      //$form['body']['widget'][0]['#title_display'] = 'invisible';
+
+      // remove unnecesary fields
+      $form['revision_log']['#access'] = FALSE;
+    }
+
+  }
+
+  // Improve menu form
+  if ($config->get('ux_menu_form_cleanup') && $form_id == 'menu_link_content_menu_link_content_form') {
+    $hasPermission = \Drupal::currentUser()->hasPermission('use advanced menu options');
+    // hide unnecessary items
+    $hide = ['enabled', 'weight', 'description', 'menu_parent'];
+    foreach ($hide as $key) {
+      $form[$key]['#access'] = $hasPermission;
+    }
+
+    // show as expanded by default
+    $form['expanded']['widget']['value']['#default_value'] = TRUE;
+    $form['expanded']['widget']['value']['#access'] = FALSE;
+    $form['actions']['delete']['#access'] = $hasPermission;
+  }
+
+  // alter menu links form to open in dialogs
+  if ($config->get('ux_menu_item_modal') && $form_id == 'menu_edit_form') {
+    foreach ($form['links']['links'] as $key => $item) {
+      if (substr($key, 0, 14) == 'menu_plugin_id') {
+        $items = ['edit', 'delete'];
+        foreach ($items as $item) {
+          if (isset($form['links']['links'][$key]['operations']['#links'][$item])) {
+            $form['links']['links'][$key]['operations']['#links'][$item]['attributes'] = [
+              'class' => ['use-ajax'],
+              'data-dialog-type' => 'modal',
+              'data-dialog-options' => json_encode(array(
+                  'width' => 450,
+              ))
+            ];
+          }
+        }
+      }
+    }
+  }
+
+  // alter taxonomy term links form to open in dialogs
+  if ($config->get('ux_term_modal') && $form_id == 'taxonomy_overview_terms') {
+    foreach ($form['terms'] as $key => $item) {
+      if (is_array($item) && isset($item['#term'])) {
+        foreach ($form['terms'][$key]['operations']['#links'] as $operation => $link) {
+          $form['terms'][$key]['operations']['#links'][$operation]['attributes'] = [
+            'class' => ['use-ajax'],
+            'data-dialog-type' => 'modal',
+            'data-dialog-options' => json_encode(array(
+                'width' => 450,
+            ))
+          ];
+        }
+      }
+    }
+  }
+
+  // improve the taxonomy term edit form
+  if ($config->get('ux_term_form_cleanup') && substr($form_id, 0, 14) == 'taxonomy_term_') {
+    $form['relations']['#access'] = FALSE;
+  }
+
+  // cleanup media image form
+  if ($form_id == 'media_image_form' || $form_id == 'media_image_edit_form') {
+    if ($config->get('ux_media_form_cleanup')) {
+      $form['revision_information']['#access'] = FALSE;
+      $form['actions']['unpublish']['#access'] = FALSE;
+      $form['actions']['delete']['#access'] = FALSE;
+    }
+  }
+
+}
+
+/**
+ * Alter local actions to open stuff in modals
+ */
+function ux_menu_local_actions_alter(&$local_actions) {
+
+  $config = \Drupal::config('ux.settings');
+
+  $ajax_actions = [];
+  if ($config->get('ux_menu_item_modal')) $ajax_actions[] ='entity.menu.add_link_form';
+  if ($config->get('ux_term_modal')) $ajax_actions[] ='entity.taxonomy_term.add_form';
+
+  foreach ($ajax_actions as $key) {
+    $local_actions[$key]['options']['attributes'] = [
+      'class' => ['use-ajax'],
+      'data-dialog-type' => 'modal',
+      'data-dialog-options' => json_encode(array(
+          'width' => 450,
+      ))
+    ];
+  }
+
+}
+
+/**
+ * Implements hook_field_widget_form_alter().
+ */
+function ux_field_widget_form_alter(&$element, FormStateInterface &$form_state, $context) {
+
+  // hide title overrides for block fields, we will use the paragraph titles for this
+  if (get_class($context['widget']) === 'Drupal\block_field\Plugin\Field\FieldWidget\BlockFieldWidget') {
+    $hide_items = ['label', 'views_label_checkbox', 'views_label_fieldset', 'label_display', 'title', 'context_mapping'];
+    foreach ($hide_items as $id) {
+      if (isset($element['settings'][$id])) $element['settings'][$id]['#access'] = FALSE;
+    }
+    $element['settings']['label_display']['#default_value'] = FALSE;
+
+  }
+
+}

@@ -1,0 +1,7 @@
+ux.ux_settings_form:
+  title: 'UX Settings'
+  route_name: ux.ux_settings_form
+  description: 'UX settings'
+  parent: system.admin_config_calibr8
+  weight: 99
+
