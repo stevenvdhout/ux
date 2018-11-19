@@ -1,7 +1,5 @@
 name: UX
 description: UX Improvements
-package: Calibr8
+package: Custom
 type: module
 core: 8.x
-dependencies:
-  - calibr8_admin
